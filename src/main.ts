@@ -25,32 +25,47 @@ const browserProfiles: number[] = [
     2, 3, 4, 5
 ]
 
-const cookies: string[] = await fs.readdir(path.join(__dirname, '..', 'resources/cookies'));
+const cookiesFileName: string[] = await fs.readdir(path.join(__dirname, '..', 'resources/cookies'));
+
+// fix up cookies to be used with puppeteer
+for (let cookieFileName of cookiesFileName) {
+    const cookiesContent: string = await fs.readFile(path.join(__dirname, '..', 'resources/cookies', cookieFileName), 'utf8');
+
+    const cookieContentFix: string = cookiesContent
+        .replace(/"sameSite": null/g, '"sameSite": "None"')
+        .replace(/"sameSite": "lax"/g, '"sameSite": "Lax"')
+        .replace(/"sameSite": "no_restriction"/g, '"sameSite": "None"');
+
+    await fs.writeFile(path.join(__dirname, '..', 'resources/cookies', cookieFileName), cookieContentFix, 'utf8');
+}
 
 for (let i = 0; i < browserProfiles.length; i++) {
-    const cookie: any[] = JSON.parse(await fs.readFile(path.join(__dirname, '../resources', cookies[i]), 'utf8'));
+    const cookiesContent: Cookie[] = JSON.parse(await fs.readFile(path.join(__dirname, '../resources', cookiesFileName[i]), 'utf8'));
 
-    // replace all sameSite values to corresponding value
-    for (let j = 0; j < cookie.length; j++) {
-        switch (cookie[j].sameSite) {
-            case 'lax':
-                cookie[j].sameSite = 'Lax';
-                break;
-            case 'no_restriction':
-                cookie[j].sameSite = 'None';
-                break;
-            case null:
-                cookie[j].sameSite = 'None';
-                break;
-        }
-    }
-
-    await puppeteer.launch({
+    const browser = await puppeteer.launch({
         executablePath: "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
         userDataDir: path.join(__dirname, '../resources', `stealth-browsers\\context-${browserProfiles[i]}`),
         headless: false,
         defaultViewport: null
     });
+
+    // add cookie
+    const page = await browser.newPage();
+
+    for (let cookieContent of cookiesContent) {
+        await page.setCookie({
+            name: cookieContent.name,
+            value: cookieContent.value,
+            domain: cookieContent.domain,
+            path: cookieContent.path,
+            secure: cookieContent.secure,
+            httpOnly: cookieContent.httpOnly,
+            sameSite: cookieContent.sameSite,
+            expires: cookieContent.expires
+        });
+    }
+
+    await page.goto('https://www.chegg.com');
 }
 
 
